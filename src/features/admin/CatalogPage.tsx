@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
-import { Button, EmptyNotice, ErrorNotice, Input, LoadingNotice, PageHeader, Panel, Textarea } from "@/components/ui"
+import { ActiveBadge, Button, EmptyNotice, ErrorNotice, Input, LoadingNotice, PageHeader, Panel, ReviewDialog, Textarea, type ReviewRequest } from "@/components/ui"
+import { Icon } from "@/components/icons"
 import { errorMessage, useAsync } from "@/hooks/useAsync"
 import { adminApi } from "./api"
 
@@ -12,17 +13,29 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const title = kind === "categories" ? "Categorías" : "Especialidades"
+  const [review, setReview] = useState<ReviewRequest | null>(null)
+  const isCategory = kind === "categories"
+  const title = isCategory ? "Categorías" : "Especialidades"
+  const singular = isCategory ? "categoría" : "especialidad"
   const data = resource.data || []
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  function askSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
+    setReview({
+      title: `¿Guardar esta ${singular}?`,
+      items: [["Nombre", String(form.get("nombre"))], ["Descripción", String(form.get("descripcion") || "")]],
+      confirmLabel: `Guardar ${singular}`,
+      run: () => submit(form),
+    })
+  }
+
+  async function submit(form: FormData) {
     setSaving(true)
     setError(null)
     try {
       const body = { nombre: String(form.get("nombre")), descripcion: String(form.get("descripcion") || ""), activo: true }
-      if (kind === "categories") await adminApi.createCategory(body)
+      if (isCategory) await adminApi.createCategory(body)
       else await adminApi.createSpecialty(body)
       await resource.reload()
       setOpen(false)
@@ -35,12 +48,41 @@ export function CatalogPage({ kind }: { kind: CatalogKind }) {
 
   return (
     <>
-      <PageHeader title={title} description={kind === "categories" ? "Clasificación de incidencias." : "Catálogo de especialidades de soporte."} action={<Button onClick={() => setOpen((value) => !value)}>{open ? "Cancelar" : `+ Nueva ${kind === "categories" ? "categoría" : "especialidad"}`}</Button>} />
+      <PageHeader
+        title={title}
+        description={isCategory ? "Clasificación que se elige al registrar una incidencia." : "Áreas de especialidad del equipo de soporte."}
+        action={
+          <Button tone={open ? "neutral" : "primary"} onClick={() => setOpen((value) => !value)}>
+            {open ? "Cancelar" : <><Icon name="plus" className="size-4" /> Nueva {singular}</>}
+          </Button>
+        }
+      />
       {error && <div className="mb-4"><ErrorNotice message={error} /></div>}
-      {open && <Panel title={`Agregar ${kind === "categories" ? "categoría" : "especialidad"}`} className="mb-5"><form onSubmit={(event) => void submit(event)} className="grid gap-4 p-5 sm:grid-cols-2"><Input label="Nombre" name="nombre" required maxLength={150} /><Textarea label="Descripción" name="descripcion" rows={2} /><Button disabled={saving}>{saving ? "Guardando…" : "Guardar"}</Button></form></Panel>}
-      <Panel title={`Catálogo de ${title.toLowerCase()}`}>
-        {resource.loading ? <LoadingNotice /> : resource.error ? <div className="p-4"><ErrorNotice message={resource.error} onRetry={() => void resource.reload()} /></div> : !data.length ? <EmptyNotice /> : <div className="divide-y divide-slate-100">{data.map((item) => <div key={item.id} className="flex flex-wrap items-center gap-3 p-5"><span className="grid size-9 place-items-center rounded-lg bg-emerald-50 text-emerald-700">✳</span><div className="flex-1"><p className="font-bold">{item.nombre}</p><p className="mt-1 text-xs text-slate-500">{item.descripcion || "Sin descripción"}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${item.activo ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{item.activo ? "Activo" : "Inactivo"}</span></div>)}</div>}
+      {open && (
+        <Panel title={`Nueva ${singular}`} className="mb-6">
+          <form onSubmit={askSubmit} className="grid gap-4 p-5 sm:grid-cols-2">
+            <Input label="Nombre" name="nombre" required maxLength={150} />
+            <Textarea label="Descripción" hint="Opcional." name="descripcion" rows={2} />
+            <div className="sm:col-span-2"><Button type="submit" disabled={saving}>{saving ? "Guardando…" : `Guardar ${singular}`}</Button></div>
+          </form>
+        </Panel>
+      )}
+      <Panel title={title} description={resource.data ? `${data.length} registradas` : undefined}>
+        {resource.loading ? <LoadingNotice /> : resource.error ? <div className="p-5"><ErrorNotice message={resource.error} onRetry={() => void resource.reload()} /></div> : !data.length ? <EmptyNotice title={`Aún no hay ${title.toLowerCase()}`}>Usa «Nueva {singular}» para crear la primera.</EmptyNotice> : (
+          <ul className="divide-y divide-slate-100">
+            {data.map((item) => (
+              <li key={item.id} className="flex flex-wrap items-center gap-3 px-5 py-4">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-slate-900">{item.nombre}</p>
+                  <p className="mt-0.5 text-sm text-slate-600">{item.descripcion || "Sin descripción"}</p>
+                </div>
+                <ActiveBadge active={item.activo} />
+              </li>
+            ))}
+          </ul>
+        )}
       </Panel>
+      {review && <ReviewDialog review={review} onClose={() => setReview(null)} />}
     </>
   )
 }

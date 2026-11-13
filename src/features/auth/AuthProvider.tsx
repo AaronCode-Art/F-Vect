@@ -1,12 +1,13 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react"
-import type { AuthResponse, AuthUser } from "@/types/api"
+import type { AuthFlowResponse, AuthResponse, AuthUser } from "@/types/api"
 import { clearTokens, readAccessToken } from "@/lib/api/client"
-import { login as loginRequest, logout as logoutRequest } from "./authApi"
+import { login as loginRequest, logout as logoutRequest, verifyMfa as verifyMfaRequest } from "./authApi"
 
 interface AuthContextValue {
   user: AuthUser | null
   ready: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<AuthFlowResponse>
+  verifyMfa: (challengeToken: string, code: string) => Promise<void>
   logout: () => Promise<void>
   updateSession: (auth: AuthResponse) => void
 }
@@ -20,6 +21,12 @@ function userFromToken(): AuthUser | null {
     const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))) as {
       sub?: string
       jti?: string
+      mfa_verified?: boolean
+    }
+    if (payload.mfa_verified !== true) {
+      clearTokens()
+      sessionStorage.removeItem("vect.user")
+      return null
     }
     const storedUser = sessionStorage.getItem("vect.user")
     if (storedUser) return JSON.parse(storedUser) as AuthUser
@@ -39,8 +46,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(auth.usuario)
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const auth = await loginRequest(email, password)
+  const login = useCallback((email: string, password: string) => loginRequest(email, password), [])
+
+  const verifyMfa = useCallback(async (challengeToken: string, code: string) => {
+    const auth = await verifyMfaRequest(challengeToken, code)
     sessionStorage.setItem("vect.user", JSON.stringify(auth.usuario))
     setUser(auth.usuario)
   }, [])
@@ -52,8 +61,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, ready, login, logout, updateSession }),
-    [user, ready, login, logout, updateSession],
+    () => ({ user, ready, login, verifyMfa, logout, updateSession }),
+    [user, ready, login, verifyMfa, logout, updateSession],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

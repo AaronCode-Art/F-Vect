@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { Navigate, Route, Routes } from "react-router-dom"
 import { AppLayout } from "@/layouts/AppLayout"
 import { navigation } from "./navigation"
@@ -18,9 +19,15 @@ import { AuditPage } from "@/features/admin/AuditPage"
 import { HistoryPage } from "@/features/history/HistoryPage"
 import { AdminHubPage } from "@/features/admin/AdminHubPage"
 import { Button, PageHeader, Panel } from "@/components/ui"
+import { connectRealtimeUpdates } from "@/lib/api/realtime"
 
 function DeniedPage() {
-  return <><PageHeader title="Acceso restringido" description="Tu rol no tiene permiso para acceder a este módulo." /><Panel><div className="p-6"><Button onClick={() => window.history.back()}>Volver</Button></div></Panel></>
+  return (
+    <>
+      <PageHeader title="Acceso restringido" description="Tu rol no tiene permiso para usar este módulo. Si lo necesitas, pide acceso a un administrador." />
+      <Panel><div className="p-5"><Button onClick={() => window.history.back()}>Volver a la página anterior</Button></div></Panel>
+    </>
+  )
 }
 
 function AccessGate({ path, children }: { path: string; children: React.ReactNode }) {
@@ -31,7 +38,13 @@ function AccessGate({ path, children }: { path: string; children: React.ReactNod
 
 function ProtectedApp() {
   const { user, ready } = useAuth()
-  if (!ready) return <div className="grid min-h-screen place-items-center text-sm text-slate-500">Cargando VECT…</div>
+  const userId = user?.id
+  useEffect(() => {
+    if (!userId) return
+    return connectRealtimeUpdates()
+  }, [userId])
+
+  if (!ready) return <div role="status" className="grid min-h-screen place-items-center text-sm text-slate-600">Cargando VECT…</div>
   if (!user) return <LoginPage />
 
   return (

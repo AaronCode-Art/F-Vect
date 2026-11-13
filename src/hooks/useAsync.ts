@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { ApiError } from "@/lib/api/client"
+import { DATA_UPDATED_EVENT } from "@/lib/api/realtimeEvents"
 
 function messageFor(error: unknown) {
   if (error instanceof ApiError) {
@@ -22,11 +23,11 @@ export function useAsync<T>(loader: () => Promise<T>, deps: readonly unknown[] =
     } finally {
       setLoading(false)
     }
-  // The caller owns the loader dependencies and passes them explicitly.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps)
   useEffect(() => {
     void reload()
+    window.addEventListener(DATA_UPDATED_EVENT, reload)
+    return () => window.removeEventListener(DATA_UPDATED_EVENT, reload)
   }, [reload])
   return { data, setData, loading, error, reload }
 }

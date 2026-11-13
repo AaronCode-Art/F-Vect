@@ -12,6 +12,7 @@ import type {
 
 export const adminApi = {
   dashboard: () => apiGet<import("@/types/api").DashboardSummary>("/dashboard/resumen"),
+  dashboardActivity: (days = 7) => apiGet<Report>(`/dashboard/actividad?dias=${days}`),
   report: (days = 30) => apiGet<Report>(`/reportes/operativo?dias=${days}`),
   reportExcel: (days = 30) => apiDownload(`/reportes/excel/operativo?dias=${days}`),
   audit: (query = "") => apiGet<ApiPage<AuditRecord>>(`/auditoria${query ? `?${query}` : ""}`),

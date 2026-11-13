@@ -37,6 +37,13 @@ export interface AuthResponse {
   usuario: AuthUser
 }
 
+export interface AuthFlowResponse {
+  status: "MFA_SETUP_REQUIRED" | "MFA_CODE_REQUIRED" | "AUTHENTICATED"
+  challengeToken?: string | null
+  otpauthUri?: string | null
+  auth?: AuthResponse | null
+}
+
 export interface Incident {
   id: string
   codigo: string

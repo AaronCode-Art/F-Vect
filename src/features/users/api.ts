@@ -15,6 +15,7 @@ export const usersApi = {
   update: (id: string, body: Record<string, unknown>) =>
     apiSend<ApiUser>(`/usuarios/${id}`, "PUT", body),
   deactivate: (id: string) => apiSend<void>(`/usuarios/${id}`, "DELETE"),
+  resetMfa: (id: string) => apiSend<void>(`/usuarios/${id}/mfa/reset`, "POST"),
   specialties: () => apiGet<Specialty[]>("/especialidades"),
   assignSpecialty: (userId: string, specialtyId: string) =>
     apiSend(`/usuarios/${userId}/especialidades`, "POST", { especialidadId: specialtyId }),

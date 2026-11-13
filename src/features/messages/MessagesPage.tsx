@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
-import { Button, EmptyNotice, ErrorNotice, Input, LoadingNotice, Select, formatDate, formatRole } from "@/components/ui"
+import { Button, Dialog, EmptyNotice, ErrorNotice, Input, LoadingNotice, Select, formatDate, formatRole } from "@/components/ui"
+import { FilePreviewDialog } from "@/components/FilePreviewDialog"
+import { Icon } from "@/components/icons"
 import { useAuth } from "@/features/auth/AuthProvider"
 import { useAsync, errorMessage } from "@/hooks/useAsync"
 import { messagesApi } from "./api"
@@ -24,6 +26,7 @@ export function MessagesPage() {
   const [participantToAdd, setParticipantToAdd] = useState("")
   const [saving, setSaving] = useState(false)
   const [attachment, setAttachment] = useState<File | null>(null)
+  const [filePreview, setFilePreview] = useState<{ name: string; url: string; mimeType?: string | null } | null>(null)
   const [attachmentDescription, setAttachmentDescription] = useState("")
   const [attachOpen, setAttachOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -155,18 +158,7 @@ export function MessagesPage() {
   const activeTitle = active?.nombre
     || active?.participantes.filter((person) => person.id !== user?.id).map((person) => person.nombre).join(", ")
   const createConversationDialog = createOpen && (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !saving) setCreateOpen(false)
-    }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="create-conversation-title" className="max-h-[90dvh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-600">VECT</p>
-            <h2 id="create-conversation-title" className="mt-1 text-lg font-bold text-slate-950">Nueva conversación</h2>
-            <p className="mt-1 text-xs text-slate-500">Busca integrantes por cargo y agrégalos a la conversación.</p>
-          </div>
-          <button type="button" aria-label="Cerrar" disabled={saving} onClick={() => setCreateOpen(false)} className="grid size-8 place-items-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200">×</button>
-        </div>
+    <Dialog title="Nueva conversación" description="Busca integrantes por cargo y agrégalos a la conversación."  onClose={() => setCreateOpen(false)} busy={saving} width="max-w-2xl">
         <form onSubmit={(event) => void createConversation(event)} className="grid gap-4 p-6 md:grid-cols-2">
           <Select
             label="Tipo de conversación"
@@ -204,9 +196,9 @@ export function MessagesPage() {
               {selectedParticipants.length > 0 ? (
                 <ul className="flex flex-wrap gap-2">
                   {selectedParticipants.map((person) => (
-                    <li key={person.id} className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs text-emerald-900">
+                    <li key={person.id} className="flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1.5 text-xs text-brand-900">
                       <span>{person.nombre} · {formatRole(person.rol)}</span>
-                      <button type="button" aria-label={`Quitar a ${person.nombre}`} onClick={() => removeParticipant(person.id)} className="font-bold text-emerald-700 hover:text-rose-700">×</button>
+                      <button type="button" aria-label={`Quitar a ${person.nombre}`} onClick={() => removeParticipant(person.id)} className="font-bold text-brand-700 hover:text-rose-700"><Icon name="close" className="size-4" /></button>
                     </li>
                   ))}
                 </ul>
@@ -215,28 +207,16 @@ export function MessagesPage() {
           )}
           <div className="flex justify-end gap-2 md:col-span-2">
             <Button type="button" tone="quiet" onClick={() => setCreateOpen(false)} disabled={saving}>Cancelar</Button>
-            <Button disabled={saving || participants.loading || selectedParticipantIds.length === 0 || (conversationType === "PRIVADA" && selectedParticipantIds.length !== 1)}>
+            <Button type="submit" disabled={saving || participants.loading || selectedParticipantIds.length === 0 || (conversationType === "PRIVADA" && selectedParticipantIds.length !== 1)}>
               {saving ? "Creando…" : "Crear conversación"}
             </Button>
           </div>
         </form>
-      </section>
-    </div>
+    </Dialog>
   )
 
   const attachmentDialog = attachOpen && (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !saving) setAttachOpen(false)
-    }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="attach-file-title" className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-start justify-between px-6 pt-6">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-600">VECT</p>
-            <h2 id="attach-file-title" className="mt-1 text-lg font-bold text-slate-950">Adjuntar archivo</h2>
-            <p className="mt-1 text-xs text-slate-500">Selecciona un archivo para enviarlo con el mensaje.</p>
-          </div>
-          <button type="button" aria-label="Cerrar" onClick={() => setAttachOpen(false)} className="grid size-8 place-items-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200">×</button>
-        </div>
+    <Dialog title="Adjuntar archivo" description="Selecciona un archivo para enviarlo con el mensaje."  onClose={() => setAttachOpen(false)} width="max-w-md">
         <div className="grid gap-4 px-6 py-5">
           <label className="block">
             <span className="mb-2 block text-xs font-bold text-slate-600">Archivo</span>
@@ -256,7 +236,7 @@ export function MessagesPage() {
                 }
               }}
             />
-            <span className="mt-1 block text-[10px] text-slate-400">Imágenes, PDF, Word, Excel, PowerPoint o texto · máximo 8 MB.</span>
+            <span className="mt-1 block text-xs text-slate-500">Imágenes, PDF, Word, Excel, PowerPoint o texto · máximo 8 MB.</span>
           </label>
           <Input label="Descripción" value={attachmentDescription} onChange={(event) => setAttachmentDescription(event.target.value)} placeholder="Describe brevemente el archivo" maxLength={500} />
         </div>
@@ -271,57 +251,43 @@ export function MessagesPage() {
             setAttachOpen(false)
           }} disabled={!attachment}>Adjuntar</Button>
         </div>
-      </section>
-    </div>
+    </Dialog>
   )
 
   const historyDialog = historyOpen && (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) setHistoryOpen(false)
-    }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="conversation-history-title" className="w-full max-w-md rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-start justify-between px-6 pt-6">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[.16em] text-emerald-600">VECT</p>
-            <h2 id="conversation-history-title" className="mt-1 text-lg font-bold text-slate-950">Historial de conversación</h2>
-            <p className="mt-1 text-xs text-slate-500">{activeTitle}</p>
-          </div>
-          <button type="button" aria-label="Cerrar" onClick={() => setHistoryOpen(false)} className="grid size-8 place-items-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200">×</button>
-        </div>
+    <Dialog title="Historial de conversación" description={activeTitle}  onClose={() => setHistoryOpen(false)} width="max-w-md">
         <form onSubmit={applyHistoryRange} className="grid gap-4 px-6 py-5">
           <Input label="Desde" type="date" value={historyFrom} max={historyTo || undefined} onChange={(event) => setHistoryFrom(event.target.value)} />
           <Input label="Hasta" type="date" value={historyTo} min={historyFrom || undefined} onChange={(event) => setHistoryTo(event.target.value)} />
           {historyError && <p role="alert" className="text-xs font-medium text-rose-700">{historyError}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button type="button" tone="quiet" onClick={() => setHistoryOpen(false)}>Cancelar</Button>
-            <Button>Aplicar período</Button>
+            <Button type="submit">Aplicar período</Button>
           </div>
         </form>
-      </section>
-    </div>
+    </Dialog>
   )
 
   return (
     <>
+      <h1 className="sr-only">Mensajes</h1>
       {error && <div className="mb-3"><ErrorNotice message={error} /></div>}
       <section className="grid h-[calc(100dvh-8.5rem)] min-h-[560px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm md:grid-cols-[280px_minmax(0,1fr)]">
         <aside className={`${selected ? "hidden md:flex" : "flex"} min-h-0 flex-col border-r border-slate-200`}>
           <div className="px-4 pb-3 pt-5">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-[.12em] text-slate-400">Conversaciones</p>
-            <button type="button" onClick={() => setCreateOpen(true)} className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 text-sm font-semibold text-white transition hover:bg-slate-800">
-              <span aria-hidden="true">＋</span> Nueva conversación
-            </button>
+            <h2 className="mb-3 text-sm font-semibold text-slate-900">Conversaciones</h2>
+            <Button className="w-full" onClick={() => setCreateOpen(true)}><Icon name="plus" className="size-4" /> Nueva conversación</Button>
           </div>
           <div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-3">
             {conversations.loading ? <LoadingNotice /> : conversations.error ? <ErrorNotice message={conversations.error} onRetry={() => void conversations.reload()} /> : !conversations.data?.length ? <EmptyNotice>Aún no tienes conversaciones.</EmptyNotice> : conversations.data.map((conversation) => {
               const isGroup = conversation.tipo === "GRUPAL"
               const title = conversation.nombre || conversation.participantes.filter((person) => person.id !== user?.id).map((person) => person.nombre).join(", ")
               return (
-                <button key={conversation.id} type="button" onClick={() => selectConversation(conversation.id)} className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${selected === conversation.id ? "bg-emerald-50" : "hover:bg-slate-50"}`}>
-                  <span className={`grid size-9 shrink-0 place-items-center rounded-full ${isGroup ? "bg-emerald-100 text-emerald-700" : "bg-violet-100 text-violet-700"}`} aria-hidden="true">{isGroup ? "▱" : "♙"}</span>
+                <button key={conversation.id} type="button" onClick={() => selectConversation(conversation.id)} className={`flex w-full items-center gap-3 rounded-xl p-3 text-left transition ${selected === conversation.id ? "bg-brand-50" : "hover:bg-slate-50"}`}>
+                  <span className={`grid size-9 shrink-0 place-items-center rounded-full ${isGroup ? "bg-brand-100 text-brand-700" : "bg-violet-100 text-violet-700"}`} aria-hidden="true"><Icon name={isGroup ? "users" : "messages"} className="size-[18px]" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-semibold text-slate-900">{title || "Conversación"}</span>
-                    <span className="mt-1 block truncate text-[10px] text-slate-400">{isGroup ? `Grupo · ${conversation.participantes.length} integrantes` : "Conversación directa"} · {formatDate(conversation.actualizadoEn)}</span>
+                    <span className="mt-1 block truncate text-xs text-slate-500">{isGroup ? `Grupo · ${conversation.participantes.length} integrantes` : "Conversación directa"} · {formatDate(conversation.actualizadoEn)}</span>
                   </span>
                 </button>
               )
@@ -335,8 +301,8 @@ export function MessagesPage() {
                 <div className="flex min-w-0 items-center gap-3">
                   <button type="button" className="shrink-0 rounded-lg px-2 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 md:hidden" onClick={() => setSelected(null)} aria-label="Volver a conversaciones">Volver</button>
                   <div className="min-w-0">
-                    <h1 className="truncate text-sm font-bold text-slate-950">{activeTitle}</h1>
-                    <p className="mt-1 flex items-center gap-1.5 text-[10px] font-medium text-emerald-600"><span className="size-1.5 rounded-full bg-emerald-500" />Canal activo · {active.tipo === "GRUPAL" ? `${active.participantes.length} integrantes` : "Directa"}</p>
+                    <h2 className="truncate font-semibold text-slate-950">{activeTitle}</h2>
+                    <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-brand-700"><span className="size-1.5 rounded-full bg-brand-500" />Canal activo · {active.tipo === "GRUPAL" ? `${active.participantes.length} integrantes` : "Directa"}</p>
                   </div>
                 </div>
                 <button type="button" onClick={openHistory} className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50">Ver historial</button>
@@ -344,38 +310,50 @@ export function MessagesPage() {
               <div ref={timelineRef} className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-slate-50/50 p-4 md:p-5">
                 {loading ? <LoadingNotice /> : visibleMessages.length ? visibleMessages.map((message) => {
             const ownMessage = message.remitenteId === user?.id
+            const file = message.archivoUrl && message.archivoNombre
+              ? { name: message.archivoNombre, url: message.archivoUrl, mimeType: message.archivoTipoMime }
+              : null
             return (
-              <article key={message.id} className={`max-w-[88%] rounded-2xl border px-4 py-3 shadow-sm sm:max-w-[78%] ${ownMessage ? "ml-auto rounded-br-md border-emerald-600 bg-emerald-600 text-white" : "rounded-bl-md border-slate-200 bg-white text-slate-800"}`}>
-                <p className={`mb-1.5 text-[10px] font-semibold ${ownMessage ? "text-emerald-100" : "text-slate-400"}`}>{message.remitenteNombre}</p>
-                {message.archivoUrl && message.archivoNombre && (
+              <article key={message.id} className={`max-w-[88%] rounded-2xl border px-4 py-3 shadow-sm sm:max-w-[78%] ${ownMessage ? "ml-auto rounded-br-md border-brand-700 bg-brand-700 text-white" : "rounded-bl-md border-slate-200 bg-white text-slate-800"}`}>
+                <p className={`mb-1.5 text-xs font-semibold ${ownMessage ? "text-emerald-100" : "text-slate-500"}`}>{message.remitenteNombre}</p>
+                {file && (
                   message.archivoTipoMime?.startsWith("image/") ? (
-                    <a href={message.archivoUrl} target="_blank" rel="noreferrer" className="mb-2 block">
-                      <img src={message.archivoUrl} alt={message.archivoNombre} className="max-h-64 rounded-lg object-contain" />
-                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setFilePreview(file)}
+                      className="mb-2 block rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                      aria-label={`Vista previa de ${file.name}`}
+                    >
+                      <img src={file.url} alt={file.name} className="max-h-64 rounded-lg object-contain" />
+                    </button>
                   ) : (
-                    <a href={message.archivoUrl} target="_blank" rel="noreferrer" className={`mb-2 flex items-center gap-2 rounded-lg p-2 text-xs underline ${ownMessage ? "bg-emerald-700 text-white" : "bg-slate-50 text-slate-700"}`}>
-                      <span aria-hidden="true">▤</span><span className="truncate">{message.archivoNombre}</span>
-                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setFilePreview(file)}
+                      className={`mb-2 flex max-w-full items-center gap-2 rounded-lg p-2 text-left text-xs underline ${ownMessage ? "bg-brand-800 text-white" : "bg-slate-50 text-slate-700"}`}
+                    >
+                      <Icon name="file" className="size-4" /><span className="truncate">{file.name}</span>
+                    </button>
                   )
                 )}
                 {message.cuerpo !== message.archivoNombre && <p className="text-sm leading-5">{message.cuerpo}</p>}
-                <time dateTime={message.creadoEn} className={`mt-2 block text-right text-[10px] ${ownMessage ? "text-emerald-100" : "text-slate-400"}`}>{formatDate(message.creadoEn)}</time>
+                <time dateTime={message.creadoEn} className={`mt-2 block text-right text-xs ${ownMessage ? "text-emerald-100" : "text-slate-500"}`}>{formatDate(message.creadoEn)}</time>
               </article>
             )
-          }) : <div className="grid min-h-full place-items-center text-center"><div><span className="mx-auto grid size-11 place-items-center rounded-full bg-emerald-50 text-lg text-emerald-600">▱</span><p className="mt-3 text-sm font-semibold text-slate-700">{messages.length ? "No hay mensajes en ese período" : "Aún no hay mensajes"}</p><p className="mt-1 text-xs text-slate-400">{messages.length ? "Elige otras fechas para consultar el historial." : "Envía el primer mensaje de esta conversación."}</p>{messages.length > 0 && appliedHistoryRange && <button type="button" onClick={() => setAppliedHistoryRange(null)} className="mt-3 text-xs font-semibold text-emerald-700 hover:text-emerald-800">Quitar filtro de fechas</button>}</div></div>}
+          }) : <div className="grid min-h-full place-items-center text-center"><div><span className="mx-auto grid size-11 place-items-center rounded-full bg-brand-50 text-lg text-brand-700"><Icon name="messages" className="size-5" /></span><p className="mt-3 text-sm font-semibold text-slate-700">{messages.length ? "No hay mensajes en ese período" : "Aún no hay mensajes"}</p><p className="mt-1 text-xs text-slate-500">{messages.length ? "Elige otras fechas para consultar el historial." : "Envía el primer mensaje de esta conversación."}</p>{messages.length > 0 && appliedHistoryRange && <button type="button" onClick={() => setAppliedHistoryRange(null)} className="mt-3 text-xs font-semibold text-brand-700 hover:text-brand-800">Quitar filtro de fechas</button>}</div></div>}
               </div>
               <form onSubmit={(event) => void send(event)} className="border-t border-slate-100 bg-white p-3 md:p-4">
-                {attachment && <div className="mb-2 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"><span className="truncate">{attachment.name} · {(attachment.size / 1024 / 1024).toFixed(1)} MB</span><button type="button" onClick={() => setAttachment(null)} className="ml-3 font-bold text-slate-500 hover:text-rose-600" aria-label="Quitar archivo">×</button></div>}
+                {attachment && <div className="mb-2 flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"><span className="truncate">{attachment.name} · {(attachment.size / 1024 / 1024).toFixed(1)} MB</span><button type="button" onClick={() => setAttachment(null)} className="ml-3 font-bold text-slate-500 hover:text-rose-600" aria-label="Quitar archivo"><Icon name="close" className="size-4" /></button></div>}
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button type="button" tone="neutral" className="size-11 shrink-0 px-0" aria-label="Adjuntar archivo" onClick={() => { setError(null); setAttachOpen(true) }} disabled={saving}><span aria-hidden="true">▤</span></Button>
+                  <Button type="button" tone="neutral" className="size-11 shrink-0 px-0" aria-label="Adjuntar archivo" onClick={() => { setError(null); setAttachOpen(true) }} disabled={saving}><Icon name="paperclip" className="size-5" /></Button>
                   <Input aria-label="Mensaje" className="min-w-40 flex-1" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Escribe un mensaje…" />
-                  <Button className="shrink-0 bg-slate-950 hover:bg-slate-800" disabled={saving || (!draft.trim() && !attachment)}>{saving ? "Enviando…" : "Enviar"}</Button>
+                  <Button type="submit" className="shrink-0" disabled={saving || (!draft.trim() && !attachment)}><Icon name="send" className="size-4" /> {saving ? "Enviando…" : "Enviar"}</Button>
                 </div>
               </form>
             </>
           ) : (
             <div className="grid flex-1 place-items-center p-6 text-center">
-              {conversations.loading ? <LoadingNotice /> : <div><span className="mx-auto grid size-12 place-items-center rounded-full bg-emerald-50 text-xl text-emerald-600">▱</span><p className="mt-3 text-sm font-semibold text-slate-700">Selecciona una conversación</p><p className="mt-1 text-xs text-slate-400">Elige una de la lista o inicia una conversación nueva.</p></div>}
+              {conversations.loading ? <LoadingNotice /> : <div><span className="mx-auto grid size-12 place-items-center rounded-full bg-brand-50 text-xl text-brand-700"><Icon name="messages" className="size-5" /></span><p className="mt-3 text-sm font-semibold text-slate-700">Selecciona una conversación</p><p className="mt-1 text-xs text-slate-500">Elige una de la lista o inicia una conversación nueva.</p></div>}
             </div>
           )}
         </div>
@@ -383,6 +361,14 @@ export function MessagesPage() {
       {createConversationDialog}
       {attachmentDialog}
       {historyDialog}
+      {filePreview && (
+        <FilePreviewDialog
+          name={filePreview.name}
+          url={filePreview.url}
+          mimeType={filePreview.mimeType}
+          onClose={() => setFilePreview(null)}
+        />
+      )}
     </>
   )
 }

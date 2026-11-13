@@ -1,5 +1,8 @@
 import { useMemo, useState } from "react"
-import { Button, EmptyNotice, ErrorNotice, Input, LoadingNotice, PageHeader, Panel, StatusPill, formatDate } from "@/components/ui"
+import { Link } from "react-router-dom"
+import { Button, EmptyNotice, ErrorNotice, Input, LoadingNotice, PageHeader, Panel, Select, StatusPill, formatDate } from "@/components/ui"
+import { FilePreviewDialog } from "@/components/FilePreviewDialog"
+import { Icon, type IconName } from "@/components/icons"
 import { useAuth } from "@/features/auth/AuthProvider"
 import { incidentsApi } from "@/features/incidents/api"
 import { messagesApi } from "@/features/messages/api"
@@ -17,6 +20,7 @@ type HistoryEvent = {
   fecha: string
   estado?: string | null
   url?: string
+  mimeType?: string
 }
 type ExpandedDetails = {
   events: HistoryEvent[]
@@ -54,6 +58,7 @@ export function HistoryPage() {
   const [expandedKey, setExpandedKey] = useState<string | null>(null)
   const [details, setDetails] = useState<Record<string, ExpandedDetails>>({})
   const [loadingKey, setLoadingKey] = useState<string | null>(null)
+  const [filePreview, setFilePreview] = useState<{ name: string; url: string; mimeType?: string } | null>(null)
 
   const technicians = useMemo(() => (users.data || [])
     .filter((person) => person.rol === "TECNICO")
@@ -112,7 +117,6 @@ export function HistoryPage() {
       } else {
         const evidence: Evidence[] = await incidentsApi.evidence(incident.id)
         cacheDetails(key, evidence
-          .filter((item) => user?.rol !== "EMPLEADO" || item.subidoPorId === user.id)
           .map((item) => ({
             id: item.id,
             titulo: item.nombreArchivo,
@@ -120,6 +124,7 @@ export function HistoryPage() {
             autor: item.subidoPorNombre,
             fecha: item.creadoEn,
             url: item.url,
+            mimeType: item.tipoMime,
           })))
       }
     } catch (caught) {
@@ -180,20 +185,30 @@ export function HistoryPage() {
           : <ol className="space-y-2">
             {data.events.map((event) => (
               <li key={event.id} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-white p-3">
-                <span className="mt-1 size-2 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
+                <span className="mt-1 size-2 shrink-0 rounded-full bg-brand-600" aria-hidden="true" />
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-center gap-2">
                     <b className="text-sm text-slate-900">{event.titulo}</b>
                     {event.estado && <StatusPill value={event.estado} />}
                   </span>
                   {event.detalle && <span className="mt-1 block whitespace-pre-wrap break-words text-xs text-slate-600">{event.detalle}</span>}
-                  <span className="mt-1 block text-[10px] text-slate-400">{event.autor || "Usuario"} · {formatDate(event.fecha)}</span>
+                  <span className="mt-1 block text-xs text-slate-500">{event.autor || "Usuario"} · {formatDate(event.fecha)}</span>
                 </span>
-                {event.url && <a href={event.url} target="_blank" rel="noreferrer" className="shrink-0 text-xs font-semibold text-emerald-700 hover:text-emerald-800">Abrir archivo</a>}
+                {event.url && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (event.url) setFilePreview({ name: event.titulo, url: event.url, mimeType: event.mimeType })
+                    }}
+                    className="shrink-0 text-xs font-semibold text-brand-700 hover:text-brand-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600"
+                  >
+                    Ver archivo
+                  </button>
+                )}
               </li>
             ))}
           </ol>}
-        <a href={`/incidencias?seleccion=${encodeURIComponent(incidentId)}`} className="mt-3 inline-block text-xs font-semibold text-emerald-700 hover:text-emerald-800">Abrir incidencia</a>
+        <Link to={`/incidencias?seleccion=${encodeURIComponent(incidentId)}`} className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-brand-700 hover:text-brand-800">Abrir incidencia <Icon name="chevronRight" className="size-4" /></Link>
       </div>
     )
   }
@@ -223,9 +238,9 @@ export function HistoryPage() {
         }
       }} /></div>}
       <Panel className="overflow-hidden">
-        <div className={`grid gap-2 border-b border-slate-100 bg-slate-50/70 p-4 ${canSupervise ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
+        <div role="tablist" aria-label="Tipo de historial" className={`grid gap-2 border-b border-slate-100 bg-slate-50/70 p-4 ${canSupervise ? "sm:grid-cols-4" : "sm:grid-cols-3"}`}>
           {tabs.map((category) => (
-            <Button key={category.id} type="button" tone={tab === category.id ? "primary" : "neutral"} onClick={() => {
+            <Button key={category.id} role="tab" aria-selected={tab === category.id} type="button" tone={tab === category.id ? "primary" : "neutral"} onClick={() => {
               setTab(category.id)
               setExpandedKey(null)
             }}>
@@ -239,13 +254,10 @@ export function HistoryPage() {
             <p className="mb-3 text-xs text-slate-500">Estos filtros se aplican a todas las secciones del historial.</p>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
               <Input label="Buscar técnico por nombre o correo" value={technicianSearch} onChange={(event) => setTechnicianSearch(event.target.value)} placeholder="Nombre o correo del técnico" />
-              <label className="block">
-                <span className="mb-2 block text-xs font-bold text-slate-600">Filtrar por técnico</span>
-                <select value={technicianId} onChange={(event) => setTechnicianId(event.target.value)} className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-400">
+              <Select label="Filtrar por técnico" value={technicianId} onChange={(event) => setTechnicianId(event.target.value)}>
                   <option value="">Todos los técnicos</option>
                   {technicians.map((person) => <option key={person.id} value={person.id}>{person.nombres} {person.apellidos} · {person.correo}</option>)}
-                </select>
-              </label>
+                </Select>
             </div>
           </div>
         )}
@@ -259,15 +271,15 @@ export function HistoryPage() {
                   const expanded = expandedKey === key
                   return (
                     <section key={request.id}>
-                      <button type="button" aria-expanded={expanded} onClick={() => void expandApproval(request)} className={`flex w-full items-center gap-4 p-4 text-left transition hover:bg-slate-50 ${expanded ? "bg-emerald-50/40" : ""}`}>
-                        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-600" aria-hidden="true">◷</span>
+                      <button type="button" aria-expanded={expanded} onClick={() => void expandApproval(request)} className={`flex w-full items-center gap-4 p-4 text-left transition hover:bg-slate-50 ${expanded ? "bg-brand-50/40" : ""}`}>
+                        <Icon name="requests" className="size-5 text-brand-700" />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-xs font-bold text-emerald-700">{request.codigo}</span>
+                          <span className="block text-xs font-bold text-brand-700">{request.codigo}</span>
                           <span className="mt-0.5 block truncate text-sm font-semibold text-slate-900">{request.descripcion}</span>
                           <span className="mt-1 block truncate text-xs text-slate-500">{request.incidenciaCodigo} · {request.solicitadoPorNombre} · {formatDate(request.creadoEn)}</span>
                         </span>
                         <StatusPill value={request.estado} />
-                        <span className="shrink-0 text-xs font-semibold text-slate-500">{expanded ? "Ocultar" : "Ver detalle"} <span aria-hidden="true">{expanded ? "⌃" : "⌄"}</span></span>
+                        <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-slate-700">{expanded ? "Ocultar" : "Ver detalle"} <Icon name="chevronDown" className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} /></span>
                       </button>
                       {expanded && renderDetails(key, request.incidenciaId)}
                     </section>
@@ -283,15 +295,15 @@ export function HistoryPage() {
                   const click = () => void expandIncident(incident, tab)
                   return (
                     <section key={incident.id}>
-                      <button type="button" aria-expanded={expanded} onClick={click} className={`flex w-full items-center gap-4 p-4 text-left transition hover:bg-slate-50 ${expanded ? "bg-emerald-50/40" : ""}`}>
-                        <span className={`grid size-10 shrink-0 place-items-center rounded-full ${tab === "INCIDENCIAS" ? "bg-emerald-50 text-emerald-600" : tab === "CHATS" ? "bg-sky-50 text-sky-600" : "bg-violet-50 text-violet-600"}`} aria-hidden="true">{tab === "INCIDENCIAS" ? "◷" : tab === "CHATS" ? "▱" : "▤"}</span>
+                      <button type="button" aria-expanded={expanded} onClick={click} className={`flex w-full items-center gap-4 p-4 text-left transition hover:bg-slate-50 ${expanded ? "bg-brand-50/40" : ""}`}>
+                        <Icon name={(tab === "INCIDENCIAS" ? "incidents" : tab === "CHATS" ? "messages" : "file") as IconName} className="size-5 text-brand-700" />
                         <span className="min-w-0 flex-1">
-                          <span className="block text-xs font-bold text-emerald-700">{incident.codigo}</span>
+                          <span className="block text-xs font-bold text-brand-700">{incident.codigo}</span>
                           <span className="mt-0.5 block truncate text-sm font-semibold text-slate-900">{incident.titulo}</span>
                           <span className="mt-1 block truncate text-xs text-slate-500">{incident.reportanteNombre} · {incident.tecnicoNombre ? `Técnico: ${incident.tecnicoNombre} · ` : ""}{formatDate(incident.creadoEn)}</span>
                         </span>
                         {tab === "INCIDENCIAS" && <StatusPill value={incident.estado} />}
-                        <span className="shrink-0 text-xs font-semibold text-slate-500">{expanded ? "Ocultar" : "Ver detalle"} <span aria-hidden="true">{expanded ? "⌃" : "⌄"}</span></span>
+                        <span className="flex shrink-0 items-center gap-1 text-sm font-semibold text-slate-700">{expanded ? "Ocultar" : "Ver detalle"} <Icon name="chevronDown" className={`size-4 transition-transform ${expanded ? "rotate-180" : ""}`} /></span>
                       </button>
                       {expanded && renderDetails(key, incident.id)}
                     </section>
@@ -300,6 +312,14 @@ export function HistoryPage() {
               </div>
               : <EmptyNotice>{tab === "INCIDENCIAS" ? "No hay incidencias en el historial." : tab === "CHATS" ? "No hay chats asociados a las incidencias." : "No hay evidencias asociadas a las incidencias."}</EmptyNotice>}
       </Panel>
+      {filePreview && (
+        <FilePreviewDialog
+          name={filePreview.name}
+          url={filePreview.url}
+          mimeType={filePreview.mimeType}
+          onClose={() => setFilePreview(null)}
+        />
+      )}
     </>
   )
 }

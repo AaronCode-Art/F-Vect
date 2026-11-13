@@ -1,5 +1,6 @@
 import { apiGet, apiSend, apiRequest } from "@/lib/api/client"
 import type {
+  ApiPage,
   Activity,
   Category,
   Evidence,
@@ -11,6 +12,16 @@ import type {
 
 export const incidentsApi = {
   list: () => apiGet<Incident[]>("/incidencias"),
+  page: (page = 0, size = 20, query = "") => {
+    const params = new URLSearchParams({ page: String(page), size: String(size) })
+    if (query) params.set("query", query)
+    return apiGet<ApiPage<Incident>>(`/incidencias/pagina?${params}`)
+  },
+  recent: (limit = 5, status?: string) => {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (status && status !== "TODOS") params.set("estado", status)
+    return apiGet<Incident[]>(`/incidencias/recientes?${params}`)
+  },
   get: (id: string) => apiGet<Incident>(`/incidencias/${id}`),
   create: (body: {
     titulo: string

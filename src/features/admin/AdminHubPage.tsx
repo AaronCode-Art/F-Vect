@@ -1,18 +1,39 @@
 import { Link } from "react-router-dom"
 import { PageHeader, Panel } from "@/components/ui"
-import { navigation } from "@/app/navigation"
+import { Icon } from "@/components/icons"
+import { navGroups, navigation } from "@/app/navigation"
 import { useAuth } from "@/features/auth/AuthProvider"
 
 export function AdminHubPage() {
   const { user } = useAuth()
-  const links = navigation.filter((item) => item.to !== "/" && item.roles.includes(user!.rol))
+  const available = navigation.filter((item) => item.roles.includes(user!.rol) && item.to !== "/" && item.to !== "/administracion")
   return (
     <>
-      <PageHeader title="Administración" description="Accesos disponibles para tu rol." />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {links.map((item) => <Link key={item.to} to={item.to} className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-emerald-300 hover:shadow-md"><span className="grid size-11 place-items-center rounded-xl bg-emerald-50 text-xl text-emerald-700">{item.icon}</span><h2 className="mt-4 font-bold">{item.label}</h2><p className="mt-1 text-xs text-slate-500">Abrir módulo con acceso habilitado para {user?.rol}.</p></Link>)}
+      <PageHeader title="Administración" description="Todos los módulos que tu rol puede usar, agrupados por tema." />
+      <div className="space-y-6">
+        {navGroups.map((group) => {
+          const items = available.filter((item) => item.group === group.id)
+          if (!items.length) return null
+          return (
+            <Panel key={group.id} title={group.label}>
+              <ul className="divide-y divide-slate-100">
+                {items.map((item) => (
+                  <li key={item.to}>
+                    <Link to={item.to} className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-slate-50">
+                      <Icon name={item.icon} className="size-5 text-brand-700" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-semibold text-slate-900">{item.label}</span>
+                        <span className="mt-0.5 block text-sm text-slate-600">{item.description}</span>
+                      </span>
+                      <Icon name="chevronRight" className="size-5 text-slate-400" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          )
+        })}
       </div>
-      <Panel title="Integridad del sistema" className="mt-5"><p className="p-5 text-sm leading-6 text-slate-600">Los permisos se aplican en el backend y se reflejan aquí en la navegación. Los perfiles y datos solo se cargan desde las APIs VECT.</p></Panel>
     </>
   )
 }

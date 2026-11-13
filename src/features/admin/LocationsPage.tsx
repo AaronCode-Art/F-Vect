@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react"
-import { Button, EmptyNotice, ErrorNotice, Input, LoadingNotice, PageHeader, Panel, Textarea } from "@/components/ui"
+import { ActiveBadge, Button, ConfirmDialog, EmptyNotice, ErrorNotice, Input, LoadingNotice, Notice, PageHeader, Panel, ReviewDialog, Textarea, type ReviewRequest } from "@/components/ui"
+import { Icon } from "@/components/icons"
 import type { Location } from "@/types/api"
 import { errorMessage, useAsync } from "@/hooks/useAsync"
 import { adminApi } from "./api"
@@ -9,7 +10,10 @@ export function LocationsPage() {
   const [editing, setEditing] = useState<Location | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [review, setReview] = useState<ReviewRequest | null>(null)
+  const [toDeactivate, setToDeactivate] = useState<Location | null>(null)
 
   function closeForm() {
     setEditing(null)
@@ -21,11 +25,25 @@ export function LocationsPage() {
     setEditing(location)
     setFormOpen(true)
     setError(null)
+    setNotice(null)
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  function askSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
+    setReview({
+      title: editing ? "¿Guardar los cambios de esta ubicación?" : "¿Crear esta ubicación?",
+      items: [
+        ["Nombre", String(form.get("nombre") || "")],
+        ["Dirección", String(form.get("direccion") || "")],
+        ...(editing ? [["Estado", form.get("activo") === "on" ? "Activa" : "Inactiva"] as [string, string]] : []),
+      ],
+      confirmLabel: editing ? "Guardar cambios" : "Crear ubicación",
+      run: () => submit(form),
+    })
+  }
+
+  async function submit(form: FormData) {
     const body = {
       nombre: String(form.get("nombre") || "").trim(),
       direccion: String(form.get("direccion") || "").trim(),
@@ -33,10 +51,12 @@ export function LocationsPage() {
     }
     setSaving(true)
     setError(null)
+    setNotice(null)
     try {
       if (editing) await adminApi.updateLocation(editing.id, body)
       else await adminApi.createLocation(body)
       await locations.reload()
+      setNotice(editing ? "Cambios guardados." : "Ubicación creada.")
       closeForm()
     } catch (caught) {
       setError(errorMessage(caught))
@@ -45,26 +65,30 @@ export function LocationsPage() {
     }
   }
 
-  async function deactivateLocation(location: Location) {
-    if (!window.confirm(`¿Deseas eliminar la ubicación "${location.nombre}"? Se conservará en los registros históricos.`)) return
+  async function deactivateLocation() {
+    if (!toDeactivate) return
+    setSaving(true)
     setError(null)
+    setNotice(null)
     try {
-      await adminApi.deactivateLocation(location.id)
+      await adminApi.deactivateLocation(toDeactivate.id)
       await locations.reload()
+      setNotice(`${toDeactivate.nombre} fue desactivada.`)
     } catch (caught) {
       setError(errorMessage(caught))
+    } finally {
+      setSaving(false)
+      setToDeactivate(null)
     }
   }
 
   async function activateLocation(location: Location) {
     setError(null)
+    setNotice(null)
     try {
-      await adminApi.updateLocation(location.id, {
-        nombre: location.nombre,
-        direccion: location.direccion || "",
-        activo: true,
-      })
+      await adminApi.updateLocation(location.id, { nombre: location.nombre, direccion: location.direccion || "", activo: true })
       await locations.reload()
+      setNotice(`${location.nombre} fue reactivada.`)
     } catch (caught) {
       setError(errorMessage(caught))
     }
@@ -74,58 +98,75 @@ export function LocationsPage() {
     <>
       <PageHeader
         title="Ubicaciones"
-        description="Administra las ubicaciones disponibles para incidencias y activos."
-        action={<Button onClick={() => {
-          setEditing(null)
-          setFormOpen((value) => !value)
-          setError(null)
-        }}>{formOpen && !editing ? "Cancelar" : "+ Nueva ubicación"}</Button>}
+        description="Sedes y áreas que se pueden elegir al registrar incidencias y activos."
+        action={
+          <Button
+            tone={formOpen && !editing ? "neutral" : "primary"}
+            onClick={() => {
+              setEditing(null)
+              setFormOpen((value) => !value)
+              setError(null)
+            }}
+          >
+            {formOpen && !editing ? "Cancelar" : <><Icon name="plus" className="size-4" /> Nueva ubicación</>}
+          </Button>
+        }
       />
+      {notice && <div className="mb-4"><Notice tone="success">{notice}</Notice></div>}
       {error && <div className="mb-4"><ErrorNotice message={error} /></div>}
       {formOpen && (
-        <Panel title={editing ? "Editar ubicación" : "Agregar ubicación"} className="mb-5">
-          <form key={editing?.id || "new-location"} onSubmit={(event) => void submit(event)} className="grid gap-4 p-5 sm:grid-cols-2">
+        <Panel title={editing ? "Editar ubicación" : "Nueva ubicación"} className="mb-6">
+          <form key={editing?.id || "new-location"} onSubmit={askSubmit} className="grid gap-4 p-5 sm:grid-cols-2">
             <Input label="Nombre" name="nombre" defaultValue={editing?.nombre || ""} required maxLength={180} />
-            <Textarea label="Dirección" name="direccion" defaultValue={editing?.direccion || ""} rows={2} />
+            <Textarea label="Dirección" hint="Opcional." name="direccion" defaultValue={editing?.direccion || ""} rows={2} />
             {editing && (
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input type="checkbox" name="activo" defaultChecked={editing.activo} className="size-4 accent-emerald-600" />
+              <label className="flex items-center gap-2 text-sm text-slate-800">
+                <input type="checkbox" name="activo" defaultChecked={editing.activo} className="size-4 accent-brand-700" />
                 Ubicación activa
               </label>
             )}
             <div className="flex items-center gap-2 sm:col-span-2">
-              <Button disabled={saving}>{saving ? "Guardando…" : editing ? "Guardar cambios" : "Guardar ubicación"}</Button>
-              <Button type="button" tone="neutral" onClick={closeForm}>Cancelar</Button>
+              <Button type="submit" disabled={saving}>{saving ? "Guardando…" : editing ? "Guardar cambios" : "Crear ubicación"}</Button>
+              <Button tone="quiet" onClick={closeForm}>Cancelar</Button>
             </div>
           </form>
         </Panel>
       )}
-      <Panel title="Catálogo de ubicaciones" description="Al eliminar una ubicación se desactiva para no alterar incidencias ni activos históricos.">
+      <Panel title="Catálogo de ubicaciones" description="Las ubicaciones desactivadas se conservan para no alterar incidencias ni activos anteriores.">
         {locations.loading ? <LoadingNotice /> : locations.error ? (
-          <div className="p-4"><ErrorNotice message={locations.error} onRetry={() => void locations.reload()} /></div>
-        ) : !locations.data?.length ? <EmptyNotice>No hay ubicaciones registradas.</EmptyNotice> : (
-          <div className="divide-y divide-slate-100">
+          <div className="p-5"><ErrorNotice message={locations.error} onRetry={() => void locations.reload()} /></div>
+        ) : !locations.data?.length ? <EmptyNotice title="Aún no hay ubicaciones">Usa «Nueva ubicación» para crear la primera.</EmptyNotice> : (
+          <ul className="divide-y divide-slate-100">
             {locations.data.map((location) => (
-              <div key={location.id} className="flex flex-wrap items-center gap-3 p-5">
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-lg text-emerald-700" aria-hidden="true">⌖</span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-slate-900">{location.nombre}</p>
-                  <p className="mt-1 break-words text-xs text-slate-500">{location.direccion || "Sin dirección registrada"}</p>
+              <li key={location.id} className="flex flex-wrap items-center gap-x-6 gap-y-3 px-5 py-4">
+                <div className="min-w-60 flex-1">
+                  <p className="font-semibold text-slate-950">{location.nombre}</p>
+                  <p className="mt-0.5 break-words text-sm text-slate-600">{location.direccion || "Sin dirección registrada"}</p>
                 </div>
-                <span className={`rounded-full px-3 py-1 text-xs font-bold ${location.activo ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                  {location.activo ? "Activa" : "Inactiva"}
-                </span>
+                <ActiveBadge active={location.activo} feminine />
                 <div className="flex gap-2">
-                  <Button tone="neutral" onClick={() => editLocation(location)}>Editar</Button>
+                  <Button tone="neutral" size="sm" onClick={() => editLocation(location)}>Editar</Button>
                   {location.activo
-                    ? <Button tone="danger" onClick={() => void deactivateLocation(location)}>Eliminar</Button>
-                    : <Button tone="neutral" onClick={() => void activateLocation(location)}>Reactivar</Button>}
+                    ? <Button tone="neutral" size="sm" onClick={() => setToDeactivate(location)}>Desactivar</Button>
+                    : <Button tone="neutral" size="sm" onClick={() => void activateLocation(location)}>Reactivar</Button>}
                 </div>
-              </div>
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </Panel>
+      {review && <ReviewDialog review={review} onClose={() => setReview(null)} />}
+      {toDeactivate && (
+        <ConfirmDialog
+          title={`¿Desactivar «${toDeactivate.nombre}»?`}
+          message="Dejará de ofrecerse al registrar incidencias. Se conserva en los registros históricos y puedes reactivarla cuando quieras."
+          confirmLabel="Desactivar ubicación"
+          tone="danger"
+          busy={saving}
+          onConfirm={() => void deactivateLocation()}
+          onCancel={() => setToDeactivate(null)}
+        />
+      )}
     </>
   )
 }

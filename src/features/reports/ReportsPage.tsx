@@ -1,20 +1,23 @@
 import { useState } from "react"
-import { Button, EmptyNotice, ErrorNotice, LoadingNotice, PageHeader, Panel } from "@/components/ui"
+import { BarList, Button, EmptyNotice, ErrorNotice, LoadingNotice, PageHeader, Panel, Select, Stat, StatGroup, Table, Tbody, Td, Th, Thead } from "@/components/ui"
+import { formatDay } from "@/utils/format"
+import { Icon } from "@/components/icons"
 import { errorMessage, useAsync } from "@/hooks/useAsync"
 import { adminApi } from "@/features/admin/api"
 
-function Distribution({ title, values }: { title: string; values: Record<string, number> }) {
-  const entries = Object.entries(values || {})
-  return <Panel title={title}>{entries.length ? <div className="space-y-3 p-5">{entries.map(([name, value]) => <div key={name} className="flex justify-between border-b border-slate-100 pb-2 text-sm"><span>{name.replaceAll("_", " ")}</span><b>{value}</b></div>)}</div> : <EmptyNotice>Sin datos en este período.</EmptyNotice>}</Panel>
+function sorted(values: Record<string, number> | undefined): [string, number][] {
+  return Object.entries(values || {}).sort((a, b) => b[1] - a[1])
 }
 
 export function ReportsPage() {
   const [days, setDays] = useState(30)
   const report = useAsync(() => adminApi.report(days), [days])
   const [error, setError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   async function exportFile() {
     setError(null)
+    setExporting(true)
     try {
       const blob = await adminApi.reportExcel(days)
       const url = URL.createObjectURL(blob)
@@ -25,23 +28,65 @@ export function ReportsPage() {
       URL.revokeObjectURL(url)
     } catch (caught) {
       setError(errorMessage(caught))
+    } finally {
+      setExporting(false)
     }
   }
 
   return (
     <>
-      <PageHeader title="Reportes" description="Reportes operativos y distribución de incidencias del backend." action={<div className="flex gap-2"><select className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={days} onChange={(event) => setDays(Number(event.target.value))}><option value={7}>7 días</option><option value={30}>30 días</option><option value={90}>90 días</option></select><Button tone="neutral" onClick={() => void exportFile()}>Exportar Excel</Button></div>} />
+      <PageHeader
+        title="Reportes"
+        description="Incidencias del período, agrupadas por estado, categoría y prioridad."
+        action={
+          <>
+            <Select aria-label="Período del reporte" value={days} onChange={(event) => setDays(Number(event.target.value))}>
+              <option value={7}>Últimos 7 días</option>
+              <option value={30}>Últimos 30 días</option>
+              <option value={90}>Últimos 90 días</option>
+            </Select>
+            <Button tone="neutral" onClick={() => void exportFile()} disabled={exporting}>
+              <Icon name="download" className="size-4" /> {exporting ? "Exportando…" : "Exportar a Excel"}
+            </Button>
+          </>
+        }
+      />
       {error && <div className="mb-4"><ErrorNotice message={error} /></div>}
       {report.error && <div className="mb-4"><ErrorNotice message={report.error} onRetry={() => void report.reload()} /></div>}
-      {report.loading ? <LoadingNotice /> : report.data && <>
-        <div className="mb-5 grid gap-4 sm:grid-cols-3">
-          {[["Total del período", report.data.total], ["Desde", report.data.desde], ["Hasta", report.data.hasta]].map(([title, value]) => <Panel key={String(title)} className="p-5"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{title}</p><p className="mt-2 text-2xl font-bold">{value}</p></Panel>)}
-        </div>
-        <div className="grid gap-5 lg:grid-cols-3"><Distribution title="Por estado" values={report.data.porEstado} /><Distribution title="Por categoría" values={report.data.porCategoria} /><Distribution title="Por prioridad" values={report.data.porPrioridad} /></div>
-        <Panel title="Serie diaria" description="Conteo diario devuelto por el servicio." className="mt-5">
-          {!report.data.serieDiaria.length ? <EmptyNotice /> : <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="px-5 py-3">Fecha</th><th className="px-5 py-3">Creadas</th><th className="px-5 py-3">Resueltas</th></tr></thead><tbody className="divide-y divide-slate-100">{report.data.serieDiaria.map((day) => <tr key={day.fecha}><td className="px-5 py-3">{day.fecha}</td><td className="px-5 py-3">{day.creadas}</td><td className="px-5 py-3">{day.resueltas}</td></tr>)}</tbody></table></div>}
-        </Panel>
-      </>}
+      {report.loading ? <Panel><LoadingNotice /></Panel> : report.data && (
+        <>
+          <StatGroup columns="lg:grid-cols-3">
+            <Stat label="Incidencias del período" value={report.data.total} />
+            <Stat label="Desde" value={<span className="text-xl">{formatDay(report.data.desde)}</span>} />
+            <Stat label="Hasta" value={<span className="text-xl">{formatDay(report.data.hasta)}</span>} />
+          </StatGroup>
+          <div className="mt-6 grid gap-6 lg:grid-cols-3">
+            <Panel title="Por estado"><BarList items={sorted(report.data.porEstado)} /></Panel>
+            <Panel title="Por categoría"><BarList items={sorted(report.data.porCategoria)} /></Panel>
+            <Panel title="Por prioridad"><BarList items={sorted(report.data.porPrioridad)} /></Panel>
+          </div>
+          <Panel title="Detalle por día" description="Incidencias creadas y resueltas en cada fecha." className="mt-6 overflow-hidden">
+            {!report.data.serieDiaria.length ? <EmptyNotice>No hay datos diarios en este período.</EmptyNotice> : (
+              <Table minWidth={420}>
+                <Thead>
+                  <Th>Fecha</Th>
+                  <Th className="text-right">Creadas</Th>
+                  <Th className="text-right">Resueltas</Th>
+                </Thead>
+                <Tbody>
+                  {report.data.serieDiaria.map((day) => (
+                    <tr key={day.fecha}>
+                      <Td>{formatDay(day.fecha)}</Td>
+                      <Td className="text-right">{day.creadas}</Td>
+                      <Td className="text-right">{day.resueltas}</Td>
+                    </tr>
+                  ))}
+                </Tbody>
+              </Table>
+            )}
+          </Panel>
+        </>
+      )}
     </>
   )
 }

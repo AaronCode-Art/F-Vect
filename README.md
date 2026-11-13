@@ -61,7 +61,13 @@ VITE_API_BASE_URL=http://localhost:8080/api
 
 La URL debe terminar en `/api`, sin una barra adicional al final. Reinicia Vite después de cambiar una variable de entorno.
 
+El inicio de sesión exige autenticación TOTP: en el primer acceso se muestra un QR para una app autenticadora compatible; después, se solicita el código de 6 dígitos en cada inicio. La sesión solo se guarda al confirmar un código correcto. La clave de cifrado y la migración de base de datos se configuran en el backend; consulta el README del backend antes de desplegar.
+
 El frontend llama a la API directamente desde el navegador; Vite no configura un proxy. Por eso, el backend debe permitir el origen del frontend en CORS, por ejemplo `http://localhost:5173` en desarrollo.
+
+La lista principal de incidencias se carga por páginas de 20 y la búsqueda se aplica en el backend. El dashboard solicita métricas agregadas y cinco incidencias recientes; no descarga la lista completa para construir sus gráficas.
+
+Las pantallas sincronizan sus datos en tiempo real mediante WebSocket cuando una escritura REST se completa, y vuelven a sincronizar al regresar a la pestaña.
 
 Las variables con prefijo `VITE_` se incorporan al JavaScript público del navegador. La URL de la API puede configurarse de esta manera, pero nunca incluyas contraseñas, tokens, claves privadas ni otros secretos.
 
